@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "ChromeDevtoolProtocol",
+    name: "swift-cdp",
     platforms: [SupportedPlatform.macOS(.v10_15)],
     products: [
       .library(name: "ChromeDevtoolProtocol", targets: ["ChromeDevtoolProtocol"]),
