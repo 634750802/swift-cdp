@@ -4,5 +4,5 @@
 /*.xcodeproj
 xcuserdata/
 chromedriver
-Sources/domains
 .idea
+.gen

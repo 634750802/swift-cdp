@@ -1,15 +1,16 @@
 import Foundation
-import SwiftCodegen
+import Logging
 
-let name = "SwiftCDPDomains"
-let outputDir = "/Users/jagger/CLionProjects/ChromeDevtoolProtocol/Sources/domains"
+fileprivate let logger = Logger(label: "codegen")
+
+let outputDir = CommandLine.arguments[1]
 
 let fm = FileManager.default
 try? FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: false)
 
 func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolProtocolDocument.Domain) {
   let dir = "\(outputDir)/Sources/\(domain.domain)"
-  print("gen \(domain.domain):")
+  logger.info("gen \(domain.domain):")
   try! fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
 
@@ -48,6 +49,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
     let typeMap = [
       "string": "String",
       "integer": "Int",
+      "float": "Double",
       "boolean": "Bool",
       "any": "[String: JsonPrimitive]",
       "number": "JsonNumber",
@@ -55,7 +57,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
     ]
     if let typeName = typeName {
       switch typeName {
-        case "string", "integer", "boolean", "number", "any", "object":
+        case "string", "integer", "float", "boolean", "number", "any", "object":
           return typeMap[typeName]!
         case "array":
           guard let arrayItem = arrayItem else {
@@ -269,9 +271,12 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
 
   func writeFile(file: String, build: (CodeBuilder) -> Void) {
     try? fm.removeItem(atPath: file)
-    print("\tgen \(file)")
+    logger.info("\tgen \(file)")
     let cb = CodeBuilder()
-    cb << "import Foundation"
+    cb.import("Foundation")
+    cb.import("ChromeDevtoolProtocol")
+    cb << ""
+
     build(cb)
     fm.createFile(atPath: file, contents: cb.build().data(using: .utf8))
   }
@@ -289,59 +294,44 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
 }
 
 
-var arr = [String]()
-var deps = [String: [String]]()
-
 var document = load("browser")
 for domain in document.domains {
   genDomain(document: document, domain: domain)
-  arr.append(domain.domain)
-  deps[domain.domain] = domain.dependencies ?? []
 }
 
 document = load("js")
 for domain in document.domains {
   genDomain(document: document, domain: domain)
-  arr.append(domain.domain)
-  deps[domain.domain] = domain.dependencies ?? []
 }
 
-print("gen Package.swift")
-var targets: [String] = []
+logger.info("gen Package.swift")
 var template = """
                // swift-tools-version:5.3
 
                import PackageDescription
 
                let package = Package(
-                 name: "SwiftCDPDomains",
-                 platforms: [SupportedPlatform.macOS(.v10_15)],
-                 dependencies: [
-                   // Dependencies declare other packages that this package depends on.
-                   // .package(url: /* package url */, from: "1.0.0"),
-                   .package(url: "https://github.com/634750802/swift-cdp.git", from: "0.0.1")
-                 ],
-                 targets: [
-               // slot targets
-                 ]
+                   name: "swift-cdp-domains",
+                   platforms: [SupportedPlatform.macOS(.v10_15)],
+                   products: [
+                     .library(name: "SwiftCDPDomains", targets: ["SwiftCDPDomains"])
+                   ],
+                   dependencies: [
+                     .package(url: "https://github.com/634750802/swift-cdp.git", from: "0.0.1")
+                   ],
+                   targets: [
+                     .target(
+                         name: "SwiftCDPDomains",
+                         dependencies: [
+                           .product(name: "ChromeDevtoolProtocol", package: "swift-cdp")
+                         ],
+                         path: "Sources"
+                     )
+                   ]
                )
                """
     .split(separator: "\n")
     .map(String.init)
-
-for item in arr {
-  targets.append(
-      """
-          .target(
-            name: "\(item)", 
-            dependencies: [
-              .product(name: "ChromeDevtoolProtocol", package: "swift-cdp")\(deps[item]!.map { ",\n        .target(name: \"\($0)\")" }.joined())
-            ]
-          ),
-      """)
-}
-let i = template.firstIndex(of: "// slot targets")!
-template.replaceSubrange(i...i, with: targets)
 
 fm.createFile(atPath: outputDir + "/Package.swift", contents: template.joined(separator: "\n").data(using: .utf8))
 

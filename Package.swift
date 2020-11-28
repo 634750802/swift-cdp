@@ -16,6 +16,7 @@ let package = Package(
       // .package(url: /* package url */, from: "1.0.0"),
       .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.0.0"),
       .package(url: "https://github.com/apple/swift-nio", from: "2.0.0"),
+      .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
       // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -33,17 +34,14 @@ let package = Package(
             .product(name: "NIOWebSocket", package: "swift-nio"),
             .product(name: "NIOHTTP1", package: "swift-nio"),
             .product(name: "NIO", package: "swift-nio"),
-            .target(name: "WebSocketClient")
+            .product(name: "Logging", package: "swift-log"),
+            .target(name: "WebSocketClient"),
           ]
       ),
       .target(
           name: "ChromeDevtoolProtocolGen",
           dependencies: [
-            .target(name: "SwiftCodegen")
-          ],
-          resources: [
-            Resource.copy("browser_protocol.json"),
-            Resource.copy("js_protocol.json")
+            .product(name: "Logging", package: "swift-log"),
           ]
       ),
       .target(
@@ -52,12 +50,8 @@ let package = Package(
             .product(name: "NIOWebSocket", package: "swift-nio"),
             .product(name: "NIOHTTP1", package: "swift-nio"),
             .product(name: "NIO", package: "swift-nio"),
+            .product(name: "Logging", package: "swift-log"),
           ]
       ),
-      .target(
-          name: "SwiftCodegen",
-          dependencies: [
-          ]
-      )
     ]
 )

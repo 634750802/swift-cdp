@@ -25,6 +25,10 @@ public class CodeBuilder {
     }
   }
 
+  public func `import`(_ package: String) {
+    self << "import \(package)"
+  }
+
   public func comment(_ multiline: String, prefix: String = "") {
     var prefix = prefix
     for line in multiline.split(separator: "\n") {
