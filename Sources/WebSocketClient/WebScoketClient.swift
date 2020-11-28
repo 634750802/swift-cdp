@@ -48,7 +48,14 @@ public final class WebSocketClient {
         // Enable SO_REUSEADDR.
         .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
         .channelInitializer { channel in
-          let httpHandler = HTTPInitialRequestHandler(url: "\(url.path)?\(url.query ?? "")#\(url.fragment ?? "")")
+          var path = url.path
+          if let query = url.query {
+            path += "?\(query)"
+          }
+          if let fragment = url.fragment {
+            path += "#\(fragment)"
+          }
+          let httpHandler = HTTPInitialRequestHandler(url: path)
           let topHandler = TopHandler()
           let websocketUpgrader = NIOWebSocketClientUpgrader(requestKey: "ff=",
               upgradePipelineHandler: { (channel, response) in
