@@ -82,11 +82,13 @@ extension JsonNumber: ExpressibleByFloatLiteral {
 }
 
 
-public enum JsonPrimitive: Codable {
+public indirect enum JsonValue: Codable {
   case int(Int)
   case double(Double)
   case string(String)
   case boolean(Bool)
+  case object([String: JsonValue])
+  case array([JsonValue])
   case null
 
   public init(from decoder: Decoder) throws {
@@ -101,6 +103,10 @@ public enum JsonPrimitive: Codable {
       self = .string(value)
     } else if let value = try? c.decode(Bool.self) {
       self = .boolean(value)
+    } else if let value = try? c.decode([JsonValue].self) {
+      self = .array(value)
+    } else if let value = try? c.decode([String: JsonValue]) {
+      self = .object(value)
     } else {
       self = .string("<JSON: Unsupported value>")
     }
@@ -117,37 +123,41 @@ public enum JsonPrimitive: Codable {
         try container.encode(value)
       case .double(let value):
         try container.encode(value)
+      case .array(let value):
+        try container.encode(value)
+      case .object(let value):
+        try container.encode(value)
       case .null:
         try container.encodeNil()
     }
   }
 }
 
-extension JsonPrimitive: ExpressibleByIntegerLiteral {
+extension JsonValue: ExpressibleByIntegerLiteral {
   public init(integerLiteral value: IntegerLiteralType) {
     self = .int(value)
   }
 }
 
-extension JsonPrimitive: ExpressibleByFloatLiteral {
+extension JsonValue: ExpressibleByFloatLiteral {
   public init(floatLiteral value: FloatLiteralType) {
     self = .double(value)
   }
 }
 
-extension JsonPrimitive: ExpressibleByBooleanLiteral {
+extension JsonValue: ExpressibleByBooleanLiteral {
   public init(booleanLiteral value: BooleanLiteralType) {
     self = .boolean(value)
   }
 }
 
-extension JsonPrimitive: ExpressibleByStringLiteral {
+extension JsonValue: ExpressibleByStringLiteral {
   public init(stringLiteral value: StringLiteralType) {
     self = .string(value)
   }
 }
 
-extension JsonPrimitive: ExpressibleByNilLiteral {
+extension JsonValue: ExpressibleByNilLiteral {
   public init(nilLiteral: Void) {
     self = .null
   }

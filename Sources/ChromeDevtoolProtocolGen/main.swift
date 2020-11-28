@@ -51,9 +51,9 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
       "integer": "Int",
       "float": "Double",
       "boolean": "Bool",
-      "any": "[String: JsonPrimitive]",
+      "any": "JsonValue",
       "number": "JsonNumber",
-      "object": "[String: JsonPrimitive]"
+      "object": "[String: JsonValue]"
     ]
     if let typeName = typeName {
       switch typeName {
