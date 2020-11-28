@@ -105,7 +105,7 @@ public indirect enum JsonValue: Codable {
       self = .boolean(value)
     } else if let value = try? c.decode([JsonValue].self) {
       self = .array(value)
-    } else if let value = try? c.decode([String: JsonValue]) {
+    } else if let value = try? c.decode([String: JsonValue].self) {
       self = .object(value)
     } else {
       self = .string("<JSON: Unsupported value>")
