@@ -1,13 +1,14 @@
 import Foundation
 import SwiftCodegen
 
+let name = "SwiftCDPDomains"
 let outputDir = "/Users/jagger/CLionProjects/ChromeDevtoolProtocol/Sources/domains"
 
 let fm = FileManager.default
 try? FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: false)
 
 func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolProtocolDocument.Domain) {
-  let dir = "\(outputDir)/\(domain.domain)"
+  let dir = "\(outputDir)/Sources/\(domain.domain)"
   print("gen \(domain.domain):")
   try! fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
@@ -66,7 +67,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
       }
     } else if let ref = ref {
       if let domain = ref.domain {
-        return "ChromeDevtoolProtocol.\(domain).\(ref.typeName)"
+        return "SwiftCDPDomains.\(domain).\(ref.typeName)"
       } else {
         if ref.typeName == type?.id {
           return "StructReference<\(ref.typeName)>"
@@ -156,7 +157,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
       if domain.deprecated == true {
         cb.deprecated()
       }
-      cb.block("extension ChromeDevtoolProtocol.\(domain.domain) ") {
+      cb.block("extension SwiftCDPDomains.\(domain.domain) ") {
         genType(type: type)
       }
       cb << ""
@@ -193,7 +194,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
         cb.deprecated()
       }
       cb.block("public struct \(command.name): ModelMethod\(genExperimental(command.experimental, hasPrefix: true))") {
-        cb << "public typealias Model = ChromeDevtoolProtocol.\(domain.domain)"
+        cb << "public typealias Model = SwiftCDPDomains.\(domain.domain)"
         cb << "public static let name = \"\(command.name)\""
         cb << ""
         for param in command.parameters ?? [] {
@@ -225,7 +226,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
     }
 
     for command in domain.commands ?? [] {
-      cb.block("extension ChromeDevtoolProtocol.\(domain.domain) ") {
+      cb.block("extension SwiftCDPDomains.\(domain.domain) ") {
         genCommand(command: command)
       }
       cb << ""
@@ -248,7 +249,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
         cb.deprecated()
       }
       cb.block("public struct \(event.name): ModelEvent\(genExperimental(event.experimental, hasPrefix: true))") {
-        cb << "public typealias Model = ChromeDevtoolProtocol.\(domain.domain)"
+        cb << "public typealias Model = SwiftCDPDomains.\(domain.domain)"
         cb << ""
         for param in event.parameters ?? [] {
           genProperty(cb: cb, type: nil, property: param)
@@ -258,7 +259,7 @@ func genDomain(document: ChromeDevtoolProtocolDocument, domain: ChromeDevtoolPro
     }
 
     for event in domain.events ?? [] {
-      cb.block("extension ChromeDevtoolProtocol.\(domain.domain) ") {
+      cb.block("extension SwiftCDPDomains.\(domain.domain) ") {
         genEvent(event: event)
       }
       cb << ""

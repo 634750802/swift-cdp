@@ -6,6 +6,11 @@ import PackageDescription
 let package = Package(
     name: "ChromeDevtoolProtocol",
     platforms: [SupportedPlatform.macOS(.v10_15)],
+    products: [
+      .library(name: "ChromeDevtoolProtocol", targets: ["ChromeDevtoolProtocol"]),
+      .executable(name: "ChromeDevtoolProtocolGen", targets: ["ChromeDevtoolProtocolGen"]),
+      .library(name: "SwiftCDP", targets: ["SwiftCDP", "ChromeDevtoolProtocol"])
+    ],
     dependencies: [
       // Dependencies declare other packages that this package depends on.
       // .package(url: /* package url */, from: "1.0.0"),
