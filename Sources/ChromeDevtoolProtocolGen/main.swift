@@ -308,6 +308,8 @@ for domain in document.domains {
 print("gen Package.swift")
 var targets: [String] = []
 var template = """
+               // swift-tools-version:5.3
+
                import PackageDescription
 
                let package = Package(
