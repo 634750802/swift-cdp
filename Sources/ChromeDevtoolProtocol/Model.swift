@@ -37,7 +37,7 @@ public extension ModelMethod {
 
 public extension ModelEvent {
   static var name: String {
-    "\(Self.Model.name)).\(String(describing: Self.self))"
+    "\(Self.Model.name).\(String(describing: Self.self))"
   }
 }
 
@@ -60,11 +60,12 @@ public enum JsonNumber: Codable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
-    let raw = try container.decode(String.self)
-    if raw.contains(".") {
-      self = .double(Double(raw)!)
+    if let raw = try? container.decode(Int.self) {
+      self = .int(raw)
+    } else if let raw = try? container.decode(Double.self) {
+      self = .double(raw)
     } else {
-      self = .int(Int(raw)!)
+      throw DecodingError.typeMismatch(JsonNumber.self, .init(codingPath: container.codingPath, debugDescription: "Could not decode JsonNumber (int or float)"))
     }
   }
 }

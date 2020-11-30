@@ -23,7 +23,6 @@ public final class WebSocketClient {
   }
 
   public func write(data: Data) -> EventLoopFuture<Void> {
-    print("write: \(String(data: data, encoding: .utf8) ?? data.description)")
     return channel.writeAndFlush(data)
   }
 

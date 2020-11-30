@@ -2,6 +2,7 @@ import Foundation
 import NIO
 import WebSocketClient
 import Combine
+import Logging
 
 
 public class ChromeClient {
@@ -11,34 +12,45 @@ public class ChromeClient {
   private var jsonDecoder = JSONDecoder()
   private var idSeq: Int = 0
   private var promises: [Int: EventLoopPromise<Data>] = [:]
-  private var eventHandlers: [String: PassthroughSubject<Data, Error>] = [:]
-  private var cancellableMap: [ObjectIdentifier: AnyCancellable] = [:]
+  private var eventHandlers: [String: [ObjectIdentifier: (subject: PassthroughSubject<Data, Error>, cancellable: AnyCancellable)]] = [:]
   private var schedulerQueue = DispatchQueue(label: "WebSocketClient.Scheduler")
+  private let logger = Logger(label: "ChromeClient")
 
   public init(client: WebSocketClient) {
     self.client = client
+    client.closeFuture.whenComplete {_ in
+      self.cancellable.cancel()
+    }
     cancellable = self.client
         .subscribe()
-        .sink(receiveCompletion: { completion in }, receiveValue: { data in
-          do {
-            print("read: \(String(data: data, encoding: .utf8) ?? data.description)")
-            let commonPart = try self.jsonDecoder.decode(ChromeDevtoolsWebsocketResponseCommonPart.self, from: data)
-            if let id = commonPart.id {
-              self.triggerResponse(.method(id: id, body: data))
-            } else if let method = commonPart.method {
-              self.triggerResponse(.event(method: method, body: data))
-            } else {
-              self.triggerResponse(.unknown(body: data))
-            }
-          } catch {
-            print(error)
-          }
-        })
+        .sink(
+            receiveCompletion: { [self] completion in
+              for subs in self.eventHandlers.values {
+                for sub in subs.values {
+                  sub.cancellable.cancel()
+                }
+              }
+              self.eventHandlers = [:]
+            },
+            receiveValue: { [self] data in
+              do {
+                logger.debug("read: \(String(data: data, encoding: .utf8) ?? data.description)")
+                let commonPart = try self.jsonDecoder.decode(ChromeDevtoolsWebsocketResponseCommonPart.self, from: data)
+                if let id = commonPart.id {
+                  self.triggerResponse(.method(id: id, body: data))
+                } else if let method = commonPart.method {
+                  self.triggerResponse(.event(method: method, body: data))
+                } else {
+                  self.triggerResponse(.unknown(body: data))
+                }
+              } catch {
+                logger.error("\(error)")
+              }
+            })
   }
 
   deinit {
     cancellable.cancel()
-    cancellableMap.values.forEach { $0.cancel() }
   }
 
   public var eventLoop: EventLoop {
@@ -57,6 +69,7 @@ public class ChromeClient {
       promises[id] = promise
       do {
         let data = try jsonEncoder.encode(ChromeDevtoolsWebsocketRequest(requestId: id, method: method))
+        logger.debug("write: \(String(data: data, encoding: .utf8) ?? data.description)")
         return self.client.write(data: data).flatMap {
           promise.futureResult.flatMapThrowing { data in
             let result = try self.jsonDecoder.decode(ChromeDevtoolsWebsocketMethodResponse<M>.self, from: data).result
@@ -76,65 +89,32 @@ public class ChromeClient {
   }
 
   @discardableResult
-  public func on<M: ModelEvent>(_ handler: @escaping (M) -> Void) -> AnyCancellable {
-    let id = schedulerQueue.sync { () -> EventSubscriberId in
-      var s: AnyCancellable? = nil
+  public func on<M: ModelEvent>(_ handler: @escaping (M) -> Void) -> some Cancellable {
+    let esi = schedulerQueue.sync { () -> EventSubscriberId in
       var subject: PassthroughSubject<Data, Error>!
-      if let _subject = self.eventHandlers[M.name] {
-        subject = _subject
-      } else {
-        subject = PassthroughSubject()
-        var count = 0
-        var anyCancellable: AnyCancellable? = nil
-        anyCancellable = subject
-            .handleEvents(
-                receiveSubscription: { _ in count += 1 },
-                receiveCancel: {
-                  count -= 1
-                  if count == 0 {
-                    self.eventHandlers[M.name] = nil
-                    subject = nil
-                  }
-                })
-            .sink(
-                receiveCompletion: { _ in
-                  anyCancellable?.cancel()
-                  anyCancellable = nil
-                },
-                receiveValue: { _ in })
-        eventHandlers[M.name] = subject
+      subject = PassthroughSubject()
+      if self.eventHandlers[M.name] == nil {
+        self.eventHandlers[M.name] = [:]
       }
-      s = subject.receive(on: self.schedulerQueue).sink(receiveCompletion: { _ in }, receiveValue: { [weak self] input in
+      let oi = ObjectIdentifier(subject)
+      let cancellable = subject.sink(receiveCompletion: { _ in }, receiveValue: { [self] input in
         do {
-          if let value = try self?.jsonDecoder.decode(ChromeDevtoolsWebsocketEventResponse<M>.self, from: input) {
-            handler(value.params)
-          } else {
-            s?.cancel()
-          }
+          let value = try self.jsonDecoder.decode(ChromeDevtoolsWebsocketEventResponse<M>.self, from: input)
+          handler(value.params)
         } catch {
-          print("Error: failed to process event \(M.name) with data \(String(data: input, encoding: .utf8) ?? "<DATA:\(input.count)>")")
+          logger.error("\(error)")
         }
       })
-      if let s = s {
-        let oi = ObjectIdentifier(s)
-        cancellableMap[oi] = s
-        return EventSubscriberId(objectId: oi)
-      } else {
-        return EventSubscriberId()
-      }
+      self.eventHandlers[M.name]![oi] = (subject, cancellable)
+      return EventSubscriberId(subject: M.name, objectId: oi)
     }
-
-    return AnyCancellable {
-      self.off(id)
-    }
+    return CancelHandler(client: self, esi: esi)
   }
 
   internal func off(_ esi: EventSubscriberId) {
     schedulerQueue.sync {
-      if let oi = esi.objectId {
-        cancellableMap[oi]?.cancel()
-        cancellableMap[oi] = nil
-      }
+      self.eventHandlers[esi.subject]?[esi.objectId]?.cancellable.cancel()
+      self.eventHandlers[esi.subject]?[esi.objectId] = nil
     }
   }
 
@@ -145,9 +125,13 @@ public class ChromeClient {
           promises[id]?.succeed(body)
           promises[id] = nil
         case .event(let method, let body):
-          eventHandlers[method]?.send(body)
+          if let tuples = eventHandlers[method]?.values {
+            for tuple in tuples {
+              tuple.subject.send(body)
+            }
+          }
         case .unknown(let body):
-          print("unknown \(String(data: body, encoding: .utf8) ?? "<Unknown data>")")
+          logger.warning("Unknown remote message \(String(data: body, encoding: .utf8) ?? "\(body)")")
       }
     }
   }
@@ -187,7 +171,15 @@ private enum ChromeDevtoolsWebsocketResponse {
 }
 
 public struct EventSubscriberId {
-  fileprivate var objectId: ObjectIdentifier?
+  fileprivate var subject: String
+  fileprivate var objectId: ObjectIdentifier
+}
 
-  fileprivate init(objectId: ObjectIdentifier? = nil) { self.objectId = objectId }
+public struct CancelHandler: Cancellable {
+  var client: ChromeClient
+  var esi: EventSubscriberId
+
+  public func cancel() {
+    client.off(esi)
+  }
 }
